@@ -1,45 +1,33 @@
 /*******************************************************************************
-* Copyright (c) 2016, ROBOTIS CO., LTD.
-* All rights reserved.
+* Copyright 2017 ROBOTIS CO., LTD.
 *
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
 *
-* * Redistributions of source code must retain the above copyright notice, this
-*   list of conditions and the following disclaimer.
+*     http://www.apache.org/licenses/LICENSE-2.0
 *
-* * Redistributions in binary form must reproduce the above copyright notice,
-*   this list of conditions and the following disclaimer in the documentation
-*   and/or other materials provided with the distribution.
-*
-* * Neither the name of ROBOTIS nor the names of its
-*   contributors may be used to endorse or promote products derived from
-*   this software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
 *******************************************************************************/
 
 /* Author: zerom, Ryu Woon Jung (Leon) */
 
-#if defined(_WIN32) || defined(_WIN64)
-#define WINDLLEXPORT
-#endif
-
 #include <stdio.h>
 #include <algorithm>
-#if defined(__OPENCR__)
+
+#if defined(__linux__)
+#include "group_bulk_read.h"
+#elif defined(__APPLE__)
+#include "group_bulk_read.h"
+#elif defined(_WIN32) || defined(_WIN64)
+#define WINDLLEXPORT
+#include "group_bulk_read.h"
+#elif defined(ARDUINO) || defined(__OPENCR__) || defined(__OPENCM904__)
 #include "../../include/dynamixel_sdk/group_bulk_read.h"
-#else
-#include "dynamixel_sdk/group_bulk_read.h"
 #endif
 
 using namespace dynamixel;
@@ -102,6 +90,7 @@ bool GroupBulkRead::addParam(uint8_t id, uint16_t start_address, uint16_t data_l
   length_list_[id]    = data_length;
   address_list_[id]   = start_address;
   data_list_[id]      = new uint8_t[data_length];
+  error_list_[id]     = new uint8_t[1];
 
   is_param_changed_   = true;
   return true;
@@ -117,7 +106,9 @@ void GroupBulkRead::removeParam(uint8_t id)
   address_list_.erase(id);
   length_list_.erase(id);
   delete[] data_list_[id];
+  delete[] error_list_[id];
   data_list_.erase(id);
+  error_list_.erase(id);
 
   is_param_changed_   = true;
 }
@@ -128,12 +119,16 @@ void GroupBulkRead::clearParam()
     return;
 
   for (unsigned int i = 0; i < id_list_.size(); i++)
+  {
     delete[] data_list_[id_list_[i]];
+    delete[] error_list_[id_list_[i]];
+  }
 
   id_list_.clear();
   address_list_.clear();
   length_list_.clear();
   data_list_.clear();
+  error_list_.clear();
   if (param_ != 0)
     delete[] param_;
   param_ = 0;
@@ -144,7 +139,7 @@ int GroupBulkRead::txPacket()
   if (id_list_.size() == 0)
     return COMM_NOT_AVAILABLE;
 
-  if (is_param_changed_ == true)
+  if (is_param_changed_ == true || param_ == 0)
     makeParam();
 
   if (ph_->getProtocolVersion() == 1.0)
@@ -171,12 +166,9 @@ int GroupBulkRead::rxPacket()
   {
     uint8_t id = id_list_[i];
 
-    result = ph_->readRx(port_, length_list_[id], data_list_[id]);
+    result = ph_->readRx(port_, id, length_list_[id], data_list_[id], error_list_[id]);
     if (result != COMM_SUCCESS)
-    {
-      fprintf(stderr, "[GroupBulkRead::rxPacket] ID %d result : %d !!!!!!!!!!\n", id, result);
       return result;
-    }
   }
 
   if (result == COMM_SUCCESS)
@@ -232,5 +224,22 @@ uint32_t GroupBulkRead::getData(uint8_t id, uint16_t address, uint16_t data_leng
 
     default:
       return 0;
+  }
+}
+
+bool GroupBulkRead::getError(uint8_t id, uint8_t* error)
+{
+  // TODO : check protocol version, last_result_, data_list
+  // if (last_result_ == false || error_list_.find(id) == error_list_.end())
+
+  error[0] = error_list_[id][0];
+
+  if (error[0] != 0)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
   }
 }

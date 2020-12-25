@@ -13,7 +13,7 @@
 
 #define USE_SPI1
 #define USE_SPI2
-
+#define USE_SPI4
 
 #define BOARD_NR_I2C  2
 #define HAL_I2C1      I2C1
@@ -82,5 +82,9 @@ static const uint8_t SCK  = PIN_SPI_SCK;
 #define BDPIN_UART1_TX          81
 #define BDPIN_UART2_RX          82
 #define BDPIN_UART2_TX          83
+
+
+
+
 
 #endif
